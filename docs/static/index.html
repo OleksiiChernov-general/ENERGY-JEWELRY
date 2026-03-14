@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Регистрация заказов на продукты</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <div class="page-shell">
+    <header class="hero">
+      <div class="hero-copy">
+        <p class="eyebrow">ENERGY JEWELRY</p>
+        <div class="metric-grid">
+          <div class="metric accent-box">
+            <span class="metric-label">Всего заказов</span>
+            <strong id="orderCount">0</strong>
+            <span class="metric-subtext">Сумма: <b id="orderSum">0.00 TL</b></span>
+          </div>
+          <div class="metric accent-box">
+            <span class="metric-label">Открытые</span>
+            <strong id="openCount">0</strong>
+            <span class="metric-subtext">Сумма: <b id="openSum">0.00 TL</b></span>
+          </div>
+          <div class="metric accent-box">
+            <span class="metric-label">Выполненные</span>
+            <strong id="completedCount">0</strong>
+            <span class="metric-subtext">Сумма: <b id="completedSum">0.00 TL</b></span>
+          </div>
+        </div>
+        <div class="metric floating-download">
+          <span class="metric-label">Файл выгрузки</span>
+          <a id="downloadLink" href="/download/product-orders.xls">product-orders.xls</a>
+        </div>
+      </div>
+    </header>
+
+    <main class="content-grid">
+      <section class="panel">
+        <div class="panel-head">
+          <h2>Новый заказ</h2>
+          <p>Выберите продукт из выпадающего списка и заполните данные заказчика.</p>
+        </div>
+
+        <form id="orderForm" class="order-form">
+          <label class="wide">
+            <span>Продукт</span>
+            <select id="product" name="product" required>
+              <option value="">Выберите продукт</option>
+            </select>
+          </label>
+
+          <label>
+            <span>Количество</span>
+            <input type="number" id="quantity" name="quantity" min="1" step="1" value="1" required>
+          </label>
+
+          <label>
+            <span>Цена</span>
+            <input type="number" id="price" name="price" min="0" step="0.01" placeholder="0.00 TL" required>
+          </label>
+
+          <label class="wide">
+            <span>Описание запроса</span>
+            <textarea id="requestDescription" name="requestDescription" rows="4" placeholder="Уточнение по заказу, пожелания, детали доставки" required></textarea>
+          </label>
+
+          <label>
+            <span>Имя заказчика</span>
+            <input type="text" id="customerName" name="customerName" placeholder="ФИО или имя" required>
+          </label>
+
+          <label class="wide">
+            <span>Адрес заказчика</span>
+            <textarea id="customerAddress" name="customerAddress" rows="3" placeholder="Город, улица, дом, квартира" required></textarea>
+          </label>
+
+          <div class="summary wide">
+            <div>
+              <span class="summary-label">Сумма заказа, TL</span>
+              <strong id="orderTotal">0.00 TL</strong>
+            </div>
+          </div>
+
+          <div class="form-actions wide">
+            <button type="submit" id="submitButton">Сохранить заказ</button>
+            <p id="statusText" class="status-text" aria-live="polite"></p>
+          </div>
+        </form>
+      </section>
+
+      <section class="panel">
+        <div class="panel-head">
+          <h2>Последние заказы</h2>
+          <p>Открытые заказы показываются сверху, выполненные автоматически уходят вниз.</p>
+        </div>
+
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>ID</th>
+                <th>Продукт</th>
+                <th>Кол-во</th>
+                <th>Цена</th>
+                <th>Сумма</th>
+                <th>Заказчик</th>
+                <th>Открыт</th>
+                <th>Статус</th>
+                <th>Действия</th>
+              </tr>
+            </thead>
+            <tbody id="ordersTable">
+              <tr>
+                <td colspan="9" class="empty-cell">Заказов пока нет</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <script src="/app.js"></script>
+</body>
+</html>
