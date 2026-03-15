@@ -166,12 +166,16 @@ h2 {
 
 .order-form {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 16px;
 }
 
 .wide {
   grid-column: 1 / -1;
+}
+
+.triple-field {
+  min-width: 0;
 }
 
 label {
@@ -417,6 +421,10 @@ tr.is-completed {
   .order-form,
   .order-details {
     grid-template-columns: 1fr;
+  }
+
+  .triple-field {
+    grid-column: 1 / -1;
   }
 
   .form-actions {

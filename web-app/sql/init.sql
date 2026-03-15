@@ -2,6 +2,7 @@ CREATE TABLE IF NOT EXISTS orders (
   order_id TEXT PRIMARY KEY,
   product TEXT NOT NULL,
   quantity INTEGER NOT NULL CHECK (quantity > 0),
+  cost_tl NUMERIC(12, 2) NOT NULL DEFAULT 0 CHECK (cost_tl >= 0),
   price NUMERIC(12, 2) NOT NULL CHECK (price >= 0),
   total NUMERIC(12, 2) NOT NULL CHECK (total >= 0),
   request_description TEXT NOT NULL,
@@ -12,6 +13,9 @@ CREATE TABLE IF NOT EXISTS orders (
   status TEXT NOT NULL CHECK (status IN ('Open', 'Completed')),
   completed_at TIMESTAMP NULL
 );
+
+ALTER TABLE orders
+  ADD COLUMN IF NOT EXISTS cost_tl NUMERIC(12, 2) NOT NULL DEFAULT 0;
 
 CREATE INDEX IF NOT EXISTS orders_status_opened_at_idx
   ON orders (status, opened_at DESC);

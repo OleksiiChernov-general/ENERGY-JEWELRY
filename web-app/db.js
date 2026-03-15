@@ -22,6 +22,7 @@ async function listOrders() {
        order_id,
        product,
        quantity,
+       cost_tl,
        price,
        total,
        request_description,
@@ -46,6 +47,7 @@ async function createOrder(order) {
        order_id,
        product,
        quantity,
+       cost_tl,
        price,
        total,
        request_description,
@@ -56,11 +58,12 @@ async function createOrder(order) {
        status,
        completed_at
      )
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::timestamp, $10::timestamp, $11, $12::timestamp)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::timestamp, $11::timestamp, $12, $13::timestamp)
      RETURNING
        order_id,
        product,
        quantity,
+       cost_tl,
        price,
        total,
        request_description,
@@ -74,6 +77,7 @@ async function createOrder(order) {
       order.orderId,
       order.product,
       order.quantity,
+      order.costTl,
       order.price,
       order.total,
       order.requestDescription,
@@ -109,6 +113,7 @@ async function completeOrder(orderId) {
        order_id,
        product,
        quantity,
+       cost_tl,
        price,
        total,
        request_description,
@@ -211,6 +216,7 @@ async function migrateLegacyOrdersIfNeeded() {
            order_id,
            product,
            quantity,
+           cost_tl,
            price,
            total,
            request_description,
@@ -221,12 +227,13 @@ async function migrateLegacyOrdersIfNeeded() {
            status,
            completed_at
          )
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::timestamp, $10::timestamp, $11, $12::timestamp)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::timestamp, $11::timestamp, $12, $13::timestamp)
          ON CONFLICT (order_id) DO NOTHING`,
         [
           order.orderId,
           order.product,
           order.quantity,
+          order.costTl,
           order.price,
           order.total,
           order.requestDescription,
@@ -256,6 +263,7 @@ async function getOrderById(orderId) {
        order_id,
        product,
        quantity,
+       cost_tl,
        price,
        total,
        request_description,
@@ -274,12 +282,18 @@ async function getOrderById(orderId) {
 }
 
 function mapOrderRow(row) {
+  const quantity = Number.parseInt(row.quantity, 10) || 0;
+  const costTl = roundMoney(row.cost_tl);
+  const price = roundMoney(row.price);
+
   return {
     orderId: asString(row.order_id),
     product: asString(row.product),
-    quantity: Number.parseInt(row.quantity, 10) || 0,
-    price: roundMoney(row.price),
+    quantity,
+    costTl,
+    price,
     total: roundMoney(row.total),
+    profitTl: roundMoney(quantity * (price - costTl)),
     requestDescription: asString(row.request_description),
     customerName: asString(row.customer_name),
     customerAddress: asString(row.customer_address),
@@ -294,14 +308,17 @@ function normalizeLegacyOrder(order) {
   const openedAt = asString(order.openedAt) || asString(order.createdAt);
   const createdAt = asString(order.createdAt) || openedAt;
   const quantity = Number.parseInt(order.quantity, 10) || 0;
+  const costTl = roundMoney(order.costTl);
   const price = roundMoney(order.price);
 
   return {
     orderId: asString(order.orderId),
     product: asString(order.product),
     quantity,
+    costTl,
     price,
     total: roundMoney(order.total || quantity * price),
+    profitTl: roundMoney(order.profitTl || quantity * (price - costTl)),
     requestDescription: asString(order.requestDescription),
     customerName: asString(order.customerName),
     customerAddress: asString(order.customerAddress),

@@ -10,6 +10,7 @@ const elements = {
   product: document.getElementById('product'),
   quantity: document.getElementById('quantity'),
   price: document.getElementById('price'),
+  costTl: document.getElementById('costTl'),
   requestDescription: document.getElementById('requestDescription'),
   customerName: document.getElementById('customerName'),
   customerAddress: document.getElementById('customerAddress'),
@@ -22,6 +23,7 @@ const elements = {
   openSum: document.getElementById('openSum'),
   completedCount: document.getElementById('completedCount'),
   completedSum: document.getElementById('completedSum'),
+  profitTotal: document.getElementById('profitTotal'),
   orderTotal: document.getElementById('orderTotal'),
   downloadLink: document.getElementById('downloadLink')
 };
@@ -44,6 +46,17 @@ function isCompleted(order) {
   return String(order.status || '').toLowerCase() === 'completed';
 }
 
+function getOrderProfit(order) {
+  if (Number.isFinite(Number(order.profitTl))) {
+    return Number(order.profitTl || 0);
+  }
+
+  const quantity = Number(order.quantity || 0);
+  const price = Number(order.price || 0);
+  const costTl = Number(order.costTl || 0);
+  return (price - costTl) * quantity;
+}
+
 function sortOrders(items) {
   return [...items].sort((left, right) => {
     const leftRank = isCompleted(left) ? 1 : 0;
@@ -63,6 +76,7 @@ function updateSummaryMetrics() {
   const openOrders = state.orders.filter((order) => !isCompleted(order));
   const completedOrders = state.orders.filter((order) => isCompleted(order));
   const sum = (items) => items.reduce((total, item) => total + Number(item.total || 0), 0);
+  const profit = (items) => items.reduce((total, item) => total + getOrderProfit(item), 0);
 
   elements.orderCount.textContent = String(state.orders.length);
   elements.orderSum.textContent = formatMoney(sum(state.orders));
@@ -70,6 +84,7 @@ function updateSummaryMetrics() {
   elements.openSum.textContent = formatMoney(sum(openOrders));
   elements.completedCount.textContent = String(completedOrders.length);
   elements.completedSum.textContent = formatMoney(sum(completedOrders));
+  elements.profitTotal.textContent = formatMoney(profit(state.orders));
 }
 
 function updateComputedTotal() {
@@ -254,6 +269,7 @@ async function submitOrder(event) {
     product: elements.product.value,
     quantity: Number(elements.quantity.value || 0),
     price: Number(elements.price.value || 0),
+    costTl: Number(elements.costTl.value || 0),
     requestDescription: elements.requestDescription.value.trim(),
     customerName: elements.customerName.value.trim(),
     customerAddress: elements.customerAddress.value.trim()
@@ -281,6 +297,7 @@ async function submitOrder(event) {
 
     elements.form.reset();
     elements.quantity.value = '1';
+    elements.costTl.value = '0.00';
     updateComputedTotal();
     setStatus('Заказ сохранен.', 'success');
   } catch (error) {

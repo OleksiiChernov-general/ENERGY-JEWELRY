@@ -5,30 +5,40 @@ Web application for registering ENERGY JEWELRY product orders.
 ## Current architecture
 
 - `server.js` serves the static UI and the existing API routes.
-- `static/` contains the current frontend and does not depend on the storage implementation.
+- `static/` contains the frontend, including the Home Screen manifest and icons.
 - `db.js` contains the PostgreSQL connection, schema initialization, legacy JSON import, and all order queries.
 - `sql/init.sql` contains a provider-neutral PostgreSQL schema for the `orders` table.
 - `data/catalog/*_csv.csv` is the product catalog bundled inside `web-app` for deployment.
 
-Orders are now stored in PostgreSQL. Local JSON and XLS files are no longer the source of truth.
-The product catalog CSV is now also stored inside `web-app`, so deployments do not depend on sibling folders outside the service root.
+Orders are stored in PostgreSQL. Local JSON and XLS files are not the source of truth.
+The product catalog CSV is stored inside `web-app`, so deployments do not depend on sibling folders outside the service root.
 
 ## What stays unchanged
 
-- Existing UI
+- Existing UI structure and visual style
 - Product catalog loading from CSV
 - Creating an order
 - Viewing the order list
 - Completing an order
 - Deleting an order
 - Downloading `/download/product-orders.xls`
-- Existing frontend API contracts
+- Existing frontend API routes
+
+## New additions
+
+- `Себестоимость` field in the order form
+- `Общая прибыль` metric in the top ENERGY JEWELRY block
+- `Cost TL` and `Profit TL` columns in the XLS export
+- Home Screen support via `manifest.json`
+- App icons:
+  `static/icons/amethyst-192.png`
+  `static/icons/amethyst-512.png`
 
 ## Requirements
 
 - Node.js 20+
 - npm
-- PostgreSQL доступный по connection string в `DATABASE_URL`
+- PostgreSQL available via `DATABASE_URL`
 
 ## Environment variables
 
@@ -82,7 +92,7 @@ npm start
 http://localhost:8086
 ```
 
-### Product catalog location
+## Product catalog location
 
 The catalog is loaded from:
 
@@ -90,9 +100,7 @@ The catalog is loaded from:
 
 This path is fully inside `web-app`, so it is included in Railway and other container deployments even when only `web-app` is used as the service root.
 
-### How database initialization works
-
-The project uses the lowest-risk option: automatic schema initialization at server startup.
+## Database initialization and compatibility
 
 At startup the server:
 
@@ -104,6 +112,15 @@ At startup the server:
 
 Because the import runs only when the table is empty, repeated restarts do not duplicate orders.
 
+The schema now includes `cost_tl` and uses a safe migration:
+
+```sql
+ALTER TABLE orders
+ADD COLUMN IF NOT EXISTS cost_tl NUMERIC(12, 2) NOT NULL DEFAULT 0;
+```
+
+This keeps old orders valid. Existing rows automatically work with `cost_tl = 0`.
+
 ## Database structure
 
 Table: `orders`
@@ -111,6 +128,7 @@ Table: `orders`
 - `order_id` - unique primary key
 - `product` - product name
 - `quantity` - integer quantity
+- `cost_tl` - `NUMERIC(12,2)`, default `0`
 - `price` - `NUMERIC(12,2)`
 - `total` - `NUMERIC(12,2)`
 - `request_description` - request text
@@ -121,11 +139,22 @@ Table: `orders`
 - `status` - `Open` or `Completed`
 - `completed_at` - nullable `TIMESTAMP`
 
-Sort order is preserved exactly as before:
+Sort order is preserved:
 
 1. open orders first
 2. completed orders after them
 3. inside each group, newer `opened_at` first
+
+## Profit calculation
+
+Profit is calculated as:
+
+```text
+(Price TL - Cost TL) × Quantity
+```
+
+The top `Общая прибыль` metric sums that value across the orders currently shown in the UI.
+For old orders that were created before `cost_tl` existed, `cost_tl` is treated as `0`.
 
 ## JSON to PostgreSQL migration
 
@@ -142,8 +171,6 @@ Migration behavior:
 - After a successful import, PostgreSQL becomes the only primary storage.
 - The JSON file is not updated anymore and is not used for runtime reads.
 
-This means the app is safe for restarts on ephemeral platforms such as Render Web Service.
-
 ## XLS export
 
 Route:
@@ -154,7 +181,48 @@ Behavior:
 
 - The file is generated on demand from PostgreSQL data.
 - The response is returned directly to the browser.
-- No local XLS file is required as persistent storage.
+- The export now includes `Cost TL` and `Profit TL`.
+
+## Home Screen / PWA support
+
+The app now includes:
+
+- `static/manifest.json`
+- `static/icons/amethyst-192.png`
+- `static/icons/amethyst-512.png`
+
+`index.html` connects the manifest, theme color, and Apple mobile web app tags so the app can be added to the phone Home Screen.
+
+## Deploy to Railway
+
+Recommended setup:
+
+- deploy the service from `ENERGY JEWELRY/web-app`
+- use PostgreSQL provided by Railway or any external PostgreSQL
+
+### Railway settings
+
+- Root Directory: `ENERGY JEWELRY/web-app`
+- Build Command: `npm install`
+- Start Command: `npm start`
+
+### Required environment variables on Railway
+
+- `DATABASE_URL` - PostgreSQL connection string
+
+Optional:
+
+- `DATABASE_SSL=true` if your PostgreSQL provider requires TLS and the URL does not already include SSL settings
+
+### Why the previous Railway catalog error is fixed
+
+Railway deploys only the selected service directory. The app previously looked for the catalog in a sibling folder outside `web-app`, which produced:
+
+```text
+CSV catalog directory was not found: /CSV_Export
+```
+
+The app now loads the catalog from `web-app/data/catalog`, so the CSV is packaged with the service and available inside the Railway container.
 
 ## Deploy to Render Free Web Service
 
@@ -180,46 +248,6 @@ Optional:
 
 You do not need to set `PORT` manually. Render injects it automatically.
 
-### Free Render limitations to keep in mind
-
-- Free Web Services can sleep after inactivity.
-- The local filesystem is ephemeral and must not be used for important order data.
-- The service can restart at any time.
-- All important data must live in PostgreSQL.
-
-This project is designed around those constraints: orders persist in PostgreSQL, while XLS is generated per request.
-
-## Deploy to Railway
-
-Recommended setup:
-
-- deploy the service from `ENERGY JEWELRY/web-app`
-- use PostgreSQL provided by Railway or any external PostgreSQL
-
-### Railway settings
-
-- Root Directory: `ENERGY JEWELRY/web-app`
-- Build Command: `npm install`
-- Start Command: `npm start`
-
-### Required environment variables on Railway
-
-- `DATABASE_URL` - PostgreSQL connection string
-
-Optional:
-
-- `DATABASE_SSL=true` if your PostgreSQL provider requires TLS and the URL does not already include SSL settings
-
-### Why the previous Railway error is fixed
-
-Railway deploys only the selected service directory. The app previously looked for the catalog in a sibling folder outside `web-app`, which produced:
-
-```text
-CSV catalog directory was not found: /CSV_Export
-```
-
-The app now loads the catalog from `web-app/data/catalog`, so the CSV is packaged with the service and available inside the Railway container.
-
 ## PostgreSQL provider portability
 
 The app is not tied to Render Postgres.
@@ -233,18 +261,18 @@ It works with any PostgreSQL provider that gives you a standard connection strin
 - local PostgreSQL
 - any managed PostgreSQL with a regular connection URL
 
-To move from one provider to another, update `DATABASE_URL` and migrate the data. The frontend and business logic do not need to change.
+## Files added in this stage
 
-## Files changed for the PostgreSQL migration
+- `static/manifest.json`
+- `static/icons/amethyst-192.png`
+- `static/icons/amethyst-512.png`
 
-Updated:
+## Files updated in this stage
 
-- `server.js` - server routes now use PostgreSQL for order operations
-- `package.json` - added PostgreSQL dependency
-- `README.md` - updated local run and deployment instructions
-
-Added:
-
-- `db.js` - isolated PostgreSQL data-access layer
-- `sql/init.sql` - schema initialization script
-- `.env.example` - example environment variables
+- `server.js`
+- `db.js`
+- `sql/init.sql`
+- `static/index.html`
+- `static/app.js`
+- `static/styles.css`
+- `README.md`

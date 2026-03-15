@@ -3,7 +3,14 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#7c4f21">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="Energy Jewelry">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
   <title>Регистрация заказов на продукты</title>
+  <link rel="manifest" href="/manifest.json">
+  <link rel="icon" type="image/png" sizes="192x192" href="/icons/amethyst-192.png">
+  <link rel="apple-touch-icon" sizes="192x192" href="/icons/amethyst-192.png">
   <link rel="stylesheet" href="/styles.css">
 </head>
 <body>
@@ -26,6 +33,11 @@
             <span class="metric-label">Выполненные</span>
             <strong id="completedCount">0</strong>
             <span class="metric-subtext">Сумма: <b id="completedSum">0.00 TL</b></span>
+          </div>
+          <div class="metric accent-box">
+            <span class="metric-label">Общая прибыль</span>
+            <strong id="profitTotal">0.00 TL</strong>
+            <span class="metric-subtext">TL</span>
           </div>
         </div>
         <div class="metric floating-download">
@@ -55,9 +67,14 @@
             <input type="number" id="quantity" name="quantity" min="1" step="1" value="1" required>
           </label>
 
-          <label>
+          <label class="triple-field">
             <span>Цена</span>
             <input type="number" id="price" name="price" min="0" step="0.01" placeholder="0.00 TL" required>
+          </label>
+
+          <label class="triple-field">
+            <span>Себестоимость</span>
+            <input type="number" id="costTl" name="costTl" min="0" step="0.01" value="0.00" placeholder="0.00 TL" required>
           </label>
 
           <label class="wide">

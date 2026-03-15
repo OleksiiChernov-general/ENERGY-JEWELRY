@@ -173,8 +173,10 @@ function buildOrder(payload) {
     orderId: `ORD-${compactTimestampNow()}`,
     product: asString(payload.product).trim(),
     quantity,
+    costTl: roundMoney(payload.costTl),
     price: roundMoney(price),
     total: roundMoney(quantity * price),
+    profitTl: roundMoney(quantity * (price - roundMoney(payload.costTl))),
     requestDescription: asString(payload.requestDescription).trim(),
     customerName: asString(payload.customerName).trim(),
     customerAddress: asString(payload.customerAddress).trim(),
@@ -202,6 +204,11 @@ function validateOrderPayload(payload) {
     throw new Error("Quantity must be greater than zero.");
   }
 
+  const costTl = parseDecimal(payload.costTl);
+  if (costTl < 0) {
+    throw new Error("Cost must not be negative.");
+  }
+
   const price = parseDecimal(payload.price);
   if (price < 0) {
     throw new Error("Price must not be negative.");
@@ -213,8 +220,10 @@ function buildSpreadsheetXml(orders) {
     "Order ID",
     "Product",
     "Quantity",
+    "Cost TL",
     "Price",
     "Total",
+    "Profit TL",
     "Request Description",
     "Customer Name",
     "Customer Address",
@@ -235,8 +244,10 @@ function buildSpreadsheetXml(orders) {
     rows.push(`<Cell><Data ss:Type="String">${escapeXml(order.orderId)}</Data></Cell>`);
     rows.push(`<Cell><Data ss:Type="String">${escapeXml(order.product)}</Data></Cell>`);
     rows.push(`<Cell><Data ss:Type="Number">${formatDecimal(order.quantity)}</Data></Cell>`);
+    rows.push(`<Cell><Data ss:Type="Number">${formatDecimal(order.costTl)}</Data></Cell>`);
     rows.push(`<Cell><Data ss:Type="Number">${formatDecimal(order.price)}</Data></Cell>`);
     rows.push(`<Cell><Data ss:Type="Number">${formatDecimal(order.total)}</Data></Cell>`);
+    rows.push(`<Cell><Data ss:Type="Number">${formatDecimal(order.profitTl)}</Data></Cell>`);
     rows.push(`<Cell><Data ss:Type="String">${escapeXml(order.requestDescription)}</Data></Cell>`);
     rows.push(`<Cell><Data ss:Type="String">${escapeXml(order.customerName)}</Data></Cell>`);
     rows.push(`<Cell><Data ss:Type="String">${escapeXml(order.customerAddress)}</Data></Cell>`);
