@@ -1,141 +1,250 @@
 # ENERGY JEWELRY Orders Web App
 
-Веб-приложение для регистрации заказов на продукты.
+Web application for registering ENERGY JEWELRY product orders.
 
-## Что сохраняется
+## Current architecture
 
-- веб-интерфейс заказов
-- чтение каталога продуктов из CSV
-- создание заказа
-- список заказов
-- завершение заказа
-- удаление заказа
-- экспорт заказов в Excel-совместимый `.xls`
+- `server.js` serves the static UI and the existing API routes.
+- `static/` contains the current frontend and does not depend on the storage implementation.
+- `db.js` contains the PostgreSQL connection, schema initialization, legacy JSON import, and all order queries.
+- `sql/init.sql` contains a provider-neutral PostgreSQL schema for the `orders` table.
+- `data/catalog/*_csv.csv` is the product catalog bundled inside `web-app` for deployment.
 
-## Структура
+Orders are now stored in PostgreSQL. Local JSON and XLS files are no longer the source of truth.
+The product catalog CSV is now also stored inside `web-app`, so deployments do not depend on sibling folders outside the service root.
 
-- `static/` - фронтенд
-- `data/product-orders.json` - текущие заказы
-- `data/product-orders.xls` - выгрузка заказов
-- `server.js` - Node.js сервер для Linux/Render
-- `../CSV_Export/*_csv.csv` - каталог продуктов
+## What stays unchanged
 
-## Локальный запуск
+- Existing UI
+- Product catalog loading from CSV
+- Creating an order
+- Viewing the order list
+- Completing an order
+- Deleting an order
+- Downloading `/download/product-orders.xls`
+- Existing frontend API contracts
 
-Требования:
+## Requirements
 
-- Node.js 20+ 
+- Node.js 20+
 - npm
+- PostgreSQL доступный по connection string в `DATABASE_URL`
 
-Установка зависимостей:
+## Environment variables
+
+Required:
+
+- `DATABASE_URL` - PostgreSQL connection string, for example `postgres://user:password@host:5432/dbname`
+
+Optional:
+
+- `PORT` - local port, default `8086`
+- `DATABASE_SSL=true` - force TLS for providers that require SSL when the URL does not already include `sslmode=require`
+
+If `DATABASE_URL` is missing, the server stops at startup with a clear error:
+
+```text
+DATABASE_URL environment variable is required.
+```
+
+## Local run
+
+1. Install dependencies:
 
 ```bash
 cd "ENERGY JEWELRY/web-app"
 npm install
 ```
 
-Запуск:
+2. Set `DATABASE_URL`.
+
+macOS/Linux:
 
 ```bash
-npm start
+export DATABASE_URL="postgres://postgres:postgres@localhost:5432/energy_jewelry"
 ```
 
-По умолчанию сервер стартует на `http://localhost:8086`.
-
-Если нужно указать порт вручную:
-
-```bash
-PORT=8086 npm start
-```
-
-В PowerShell:
+PowerShell:
 
 ```powershell
-$env:PORT=8086
+$env:DATABASE_URL="postgres://postgres:postgres@localhost:5432/energy_jewelry"
+```
+
+3. Start the app:
+
+```bash
 npm start
 ```
 
-## Деплой на Render
-
-Рекомендуемый вариант: `Web Service` без Docker.
-
-### Настройка сервиса
-
-1. Залей проект в GitHub.
-2. В Render создай `New +` -> `Web Service`.
-3. Выбери репозиторий.
-4. Укажи `Root Directory`:
+4. Open:
 
 ```text
-ENERGY JEWELRY/web-app
+http://localhost:8086
 ```
 
-5. Build Command:
+### Product catalog location
 
-```bash
-npm install
-```
+The catalog is loaded from:
 
-6. Start Command:
+- `data/catalog/*_csv.csv`
 
-```bash
-npm start
-```
+This path is fully inside `web-app`, so it is included in Railway and other container deployments even when only `web-app` is used as the service root.
 
-7. Environment:
+### How database initialization works
 
-- `PORT` задавать вручную не нужно, Render передаст его сам.
+The project uses the lowest-risk option: automatic schema initialization at server startup.
 
-### Что важно для Render
+At startup the server:
 
-- сервер читает порт из `process.env.PORT`
-- сервер слушает `0.0.0.0`
-- все пути собраны через `path.join(...)`
-- PowerShell не используется
+1. connects to PostgreSQL using `DATABASE_URL`
+2. executes `sql/init.sql`
+3. checks whether the `orders` table is empty
+4. if the table is empty and `data/product-orders.json` exists, imports legacy orders once
+5. starts the web server
 
-## Переменные окружения
+Because the import runs only when the table is empty, repeated restarts do not duplicate orders.
 
-На этапе 1 обязательных пользовательских переменных нет.
+## Database structure
 
-Используются:
+Table: `orders`
 
-- `PORT` - порт, который передает Render
+- `order_id` - unique primary key
+- `product` - product name
+- `quantity` - integer quantity
+- `price` - `NUMERIC(12,2)`
+- `total` - `NUMERIC(12,2)`
+- `request_description` - request text
+- `customer_name` - customer name
+- `customer_address` - customer address
+- `opened_at` - `TIMESTAMP`
+- `created_at` - `TIMESTAMP`
+- `status` - `Open` or `Completed`
+- `completed_at` - nullable `TIMESTAMP`
 
-## Где сейчас хранятся заказы
+Sort order is preserved exactly as before:
 
-Сейчас заказы хранятся в файле:
+1. open orders first
+2. completed orders after them
+3. inside each group, newer `opened_at` first
+
+## JSON to PostgreSQL migration
+
+Legacy file:
 
 - `data/product-orders.json`
 
-А Excel-совместимая выгрузка пишется в:
+Migration behavior:
 
-- `data/product-orders.xls`
+- The file is treated only as a one-time import source.
+- Import happens only if the PostgreSQL table `orders` is empty.
+- Each imported row is inserted by `order_id`.
+- The import uses `ON CONFLICT (order_id) DO NOTHING`, so duplicate IDs are not inserted.
+- After a successful import, PostgreSQL becomes the only primary storage.
+- The JSON file is not updated anymore and is not used for runtime reads.
 
-Каталог продуктов читается из CSV:
+This means the app is safe for restarts on ephemeral platforms such as Render Web Service.
 
-- `../CSV_Export/Лист1_csv.csv`
+## XLS export
 
-## Ограничения файлового хранения
+Route:
 
-Текущее хранение файловое и подходит для этапа 1, но у него есть ограничения:
+- `/download/product-orders.xls`
 
-- данные лежат на локальном диске инстанса
-- после перезапуска или пересоздания инстанса Render изменения могут пропасть
-- это не подходит для надежного постоянного хранения заказов
+Behavior:
 
-## Что нужно изменить для постоянного хранения
+- The file is generated on demand from PostgreSQL data.
+- The response is returned directly to the browser.
+- No local XLS file is required as persistent storage.
 
-Если потребуется постоянное хранение после рестарта Render, нужно заменить файловое хранение на одно из следующих:
+## Deploy to Render Free Web Service
 
-- PostgreSQL
-- внешний объектный storage для файлов выгрузки
-- persistent disk Render плюс адаптация хранения
+Recommended target:
 
-Наиболее правильный следующий этап:
+- Render `Web Service`
+- free plan
+- no Docker required
 
-1. хранить заказы в PostgreSQL
-2. XLS формировать на лету или складывать в storage
+### Render settings
 
-## Примечание по старому запуску
+- Root Directory: `ENERGY JEWELRY/web-app`
+- Build Command: `npm install`
+- Start Command: `npm start`
 
-Файл `start-orders-web.ps1` оставлен в проекте как исторический локальный вариант, но для Render и Linux он не используется.
+### Required environment variables on Render
+
+- `DATABASE_URL` - external PostgreSQL connection string
+
+Optional:
+
+- `DATABASE_SSL=true` if your PostgreSQL provider requires TLS and the URL does not already include SSL settings
+
+You do not need to set `PORT` manually. Render injects it automatically.
+
+### Free Render limitations to keep in mind
+
+- Free Web Services can sleep after inactivity.
+- The local filesystem is ephemeral and must not be used for important order data.
+- The service can restart at any time.
+- All important data must live in PostgreSQL.
+
+This project is designed around those constraints: orders persist in PostgreSQL, while XLS is generated per request.
+
+## Deploy to Railway
+
+Recommended setup:
+
+- deploy the service from `ENERGY JEWELRY/web-app`
+- use PostgreSQL provided by Railway or any external PostgreSQL
+
+### Railway settings
+
+- Root Directory: `ENERGY JEWELRY/web-app`
+- Build Command: `npm install`
+- Start Command: `npm start`
+
+### Required environment variables on Railway
+
+- `DATABASE_URL` - PostgreSQL connection string
+
+Optional:
+
+- `DATABASE_SSL=true` if your PostgreSQL provider requires TLS and the URL does not already include SSL settings
+
+### Why the previous Railway error is fixed
+
+Railway deploys only the selected service directory. The app previously looked for the catalog in a sibling folder outside `web-app`, which produced:
+
+```text
+CSV catalog directory was not found: /CSV_Export
+```
+
+The app now loads the catalog from `web-app/data/catalog`, so the CSV is packaged with the service and available inside the Railway container.
+
+## PostgreSQL provider portability
+
+The app is not tied to Render Postgres.
+
+It works with any PostgreSQL provider that gives you a standard connection string in `DATABASE_URL`, including:
+
+- Render Postgres
+- Neon
+- Supabase
+- Railway
+- local PostgreSQL
+- any managed PostgreSQL with a regular connection URL
+
+To move from one provider to another, update `DATABASE_URL` and migrate the data. The frontend and business logic do not need to change.
+
+## Files changed for the PostgreSQL migration
+
+Updated:
+
+- `server.js` - server routes now use PostgreSQL for order operations
+- `package.json` - added PostgreSQL dependency
+- `README.md` - updated local run and deployment instructions
+
+Added:
+
+- `db.js` - isolated PostgreSQL data-access layer
+- `sql/init.sql` - schema initialization script
+- `.env.example` - example environment variables

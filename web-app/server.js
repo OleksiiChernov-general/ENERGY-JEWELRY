@@ -2,6 +2,13 @@ const express = require("express");
 const fs = require("fs");
 const path = require("path");
 const iconv = require("iconv-lite");
+const {
+  initializeOrdersStore,
+  listOrders,
+  createOrder,
+  completeOrder,
+  deleteOrder
+} = require("./db");
 
 const app = express();
 
@@ -9,15 +16,10 @@ const PORT = Number(process.env.PORT || 8086);
 const HOST = "0.0.0.0";
 
 const APP_ROOT = __dirname;
-const PROJECT_ROOT = path.dirname(APP_ROOT);
 const STATIC_ROOT = path.join(APP_ROOT, "static");
 const DATA_ROOT = path.join(APP_ROOT, "data");
-const PRODUCTS_DIR = path.join(PROJECT_ROOT, "CSV_Export");
-const ORDERS_JSON_PATH = path.join(DATA_ROOT, "product-orders.json");
-const ORDERS_XLS_PATH = path.join(DATA_ROOT, "product-orders.xls");
+const PRODUCTS_DIR = path.join(DATA_ROOT, "catalog");
 const PRODUCTS_CSV_PATH = resolveProductsCsvPath();
-
-fs.mkdirSync(DATA_ROOT, { recursive: true });
 
 app.use(express.json());
 app.use((req, res, next) => {
@@ -36,21 +38,39 @@ app.get("/api/products", (_req, res) => {
   res.json({ items: getProductCatalog() });
 });
 
-app.get("/api/orders", (_req, res) => {
-  res.json({
-    items: getSortedOrders(loadOrders()),
-    workbook: "/download/product-orders.xls"
-  });
+app.get("/api/orders", async (_req, res) => {
+  try {
+    res.json({
+      items: await listOrders(),
+      workbook: "/download/product-orders.xls"
+    });
+  } catch (error) {
+    res.status(500).json({ error: "Failed to load orders." });
+  }
 });
 
-app.post("/api/orders", (req, res) => {
+app.post("/api/orders", async (req, res) => {
   try {
     const order = buildOrder(req.body || {});
-    const orders = getSortedOrders([...loadOrders(), order]);
-    saveOrders(orders);
-    exportOrdersWorkbook(orders);
+    const savedOrder = await createOrder(order);
 
     res.status(201).json({
+      item: savedOrder,
+      workbook: "/download/product-orders.xls"
+    });
+  } catch (error) {
+    res.status(error.message === "DATABASE_URL environment variable is required." ? 500 : 400).json({
+      error: error.message
+    });
+  }
+});
+
+app.post("/api/orders/:orderId/complete", async (req, res) => {
+  try {
+    const orderId = String(req.params.orderId || "");
+    const order = await completeOrder(orderId);
+
+    res.json({
       item: order,
       workbook: "/download/product-orders.xls"
     });
@@ -59,49 +79,10 @@ app.post("/api/orders", (req, res) => {
   }
 });
 
-app.post("/api/orders/:orderId/complete", (req, res) => {
+app.post("/api/orders/:orderId/cancel", async (req, res) => {
   try {
     const orderId = String(req.params.orderId || "");
-    const orders = loadOrders();
-    const target = orders.find((order) => order.orderId === orderId);
-
-    if (!target) {
-      throw new Error("Order not found.");
-    }
-
-    if (target.status === "Completed") {
-      throw new Error("Order is already completed.");
-    }
-
-    target.status = "Completed";
-    target.completedAt = timestampNow();
-
-    const sortedOrders = getSortedOrders(orders);
-    saveOrders(sortedOrders);
-    exportOrdersWorkbook(sortedOrders);
-
-    res.json({
-      item: target,
-      workbook: "/download/product-orders.xls"
-    });
-  } catch (error) {
-    res.status(400).json({ error: error.message });
-  }
-});
-
-app.post("/api/orders/:orderId/cancel", (req, res) => {
-  try {
-    const orderId = String(req.params.orderId || "");
-    const orders = loadOrders();
-    const remainingOrders = orders.filter((order) => order.orderId !== orderId);
-
-    if (remainingOrders.length === orders.length) {
-      throw new Error("Order not found.");
-    }
-
-    const sortedOrders = getSortedOrders(remainingOrders);
-    saveOrders(sortedOrders);
-    exportOrdersWorkbook(sortedOrders);
+    await deleteOrder(orderId);
 
     res.json({
       removedOrderId: orderId,
@@ -112,21 +93,37 @@ app.post("/api/orders/:orderId/cancel", (req, res) => {
   }
 });
 
-app.get("/download/product-orders.xls", (_req, res) => {
-  if (!fs.existsSync(ORDERS_XLS_PATH)) {
-    exportOrdersWorkbook(loadOrders());
+app.get("/download/product-orders.xls", async (_req, res) => {
+  try {
+    const orders = await listOrders();
+    const xml = buildSpreadsheetXml(orders);
+
+    res.setHeader("Content-Type", "application/vnd.ms-excel; charset=utf-8");
+    res.setHeader("Content-Disposition", 'attachment; filename="product-orders.xls"');
+    res.send(xml);
+  } catch (error) {
+    res.status(500).json({ error: "Failed to build workbook." });
   }
-
-  res.download(ORDERS_XLS_PATH, "product-orders.xls");
 });
 
-ensureDataFiles();
+startServer();
 
-app.listen(PORT, HOST, () => {
-  console.log(`Product order app started at http://${HOST}:${PORT}`);
-  console.log(`Catalog source: ${PRODUCTS_CSV_PATH}`);
-  console.log(`Workbook output: ${ORDERS_XLS_PATH}`);
-});
+async function startServer() {
+  try {
+    await initializeOrdersStore();
+
+    app.listen(PORT, HOST, () => {
+      console.log(`Product order app started at http://${HOST}:${PORT}`);
+      console.log(`Catalog source: ${PRODUCTS_CSV_PATH}`);
+      console.log("Orders storage: PostgreSQL via DATABASE_URL");
+      console.log("Workbook route: /download/product-orders.xls");
+    });
+  } catch (error) {
+    console.error("Application startup failed.");
+    console.error(error.message);
+    process.exit(1);
+  }
+}
 
 function resolveProductsCsvPath() {
   if (!fs.existsSync(PRODUCTS_DIR)) {
@@ -146,16 +143,6 @@ function resolveProductsCsvPath() {
   return match;
 }
 
-function ensureDataFiles() {
-  if (!fs.existsSync(ORDERS_JSON_PATH)) {
-    saveOrders([]);
-  }
-
-  const normalizedOrders = getSortedOrders(loadOrders());
-  saveOrders(normalizedOrders);
-  exportOrdersWorkbook(normalizedOrders);
-}
-
 function getProductCatalog() {
   const csvBuffer = fs.readFileSync(PRODUCTS_CSV_PATH);
   const csvText = iconv.decode(csvBuffer, "win1251");
@@ -173,46 +160,6 @@ function getProductCatalog() {
   items.forEach((item) => unique.set(item.name, item));
 
   return [...unique.values()].sort((left, right) => left.name.localeCompare(right.name, "ru"));
-}
-
-function loadOrders() {
-  if (!fs.existsSync(ORDERS_JSON_PATH)) {
-    return [];
-  }
-
-  const raw = fs.readFileSync(ORDERS_JSON_PATH, "utf8").trim();
-  if (!raw) {
-    return [];
-  }
-
-  const parsed = JSON.parse(raw);
-  const items = Array.isArray(parsed) ? parsed : [parsed];
-  return items.map(normalizeOrder);
-}
-
-function saveOrders(orders) {
-  fs.writeFileSync(ORDERS_JSON_PATH, `${JSON.stringify(orders, null, 2)}\n`, "utf8");
-}
-
-function normalizeOrder(order) {
-  const openedAt = asString(order.openedAt) || asString(order.createdAt);
-  const createdAt = asString(order.createdAt) || openedAt;
-  const status = asString(order.status) || "Open";
-
-  return {
-    orderId: asString(order.orderId),
-    product: asString(order.product),
-    quantity: Number.parseInt(order.quantity, 10) || 0,
-    price: roundMoney(order.price),
-    total: roundMoney(order.total),
-    requestDescription: asString(order.requestDescription),
-    customerName: asString(order.customerName),
-    customerAddress: asString(order.customerAddress),
-    openedAt,
-    createdAt,
-    status,
-    completedAt: asString(order.completedAt)
-  };
 }
 
 function buildOrder(payload) {
@@ -259,35 +206,6 @@ function validateOrderPayload(payload) {
   if (price < 0) {
     throw new Error("Price must not be negative.");
   }
-}
-
-function getSortedOrders(orders) {
-  return [...orders].sort((left, right) => {
-    const leftRank = left.status === "Completed" ? 1 : 0;
-    const rightRank = right.status === "Completed" ? 1 : 0;
-
-    if (leftRank !== rightRank) {
-      return leftRank - rightRank;
-    }
-
-    return compareTimestampsDesc(left.openedAt, right.openedAt);
-  });
-}
-
-function compareTimestampsDesc(left, right) {
-  const leftValue = asString(left);
-  const rightValue = asString(right);
-
-  if (leftValue === rightValue) {
-    return 0;
-  }
-
-  return leftValue < rightValue ? 1 : -1;
-}
-
-function exportOrdersWorkbook(orders) {
-  const xml = buildSpreadsheetXml(orders);
-  fs.writeFileSync(ORDERS_XLS_PATH, xml, "utf8");
 }
 
 function buildSpreadsheetXml(orders) {
@@ -358,14 +276,7 @@ ${rows.join("\n")}
 }
 
 function timestampNow() {
-  const value = new Date();
-  const year = value.getFullYear();
-  const month = pad(value.getMonth() + 1);
-  const day = pad(value.getDate());
-  const hour = pad(value.getHours());
-  const minute = pad(value.getMinutes());
-  const second = pad(value.getSeconds());
-  return `${year}-${month}-${day} ${hour}:${minute}:${second}`;
+  return formatDateTime(new Date());
 }
 
 function compactTimestampNow() {
@@ -405,6 +316,16 @@ function escapeXml(value) {
 
 function asString(value) {
   return value == null ? "" : String(value);
+}
+
+function formatDateTime(value) {
+  const year = value.getFullYear();
+  const month = pad(value.getMonth() + 1);
+  const day = pad(value.getDate());
+  const hour = pad(value.getHours());
+  const minute = pad(value.getMinutes());
+  const second = pad(value.getSeconds());
+  return `${year}-${month}-${day} ${hour}:${minute}:${second}`;
 }
 
 function pad(value) {
