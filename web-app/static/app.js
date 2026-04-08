@@ -132,12 +132,7 @@ function renderOrders() {
         <td><span class="status-pill ${isCompleted(order) ? 'completed' : 'open'}">${isCompleted(order) ? 'Выполнен' : 'Открыт'}</span></td>
         <td>
           <div class="row-actions">
-            ${isCompleted(order)
-              ? '<span class="completed-label">Готово</span>'
-              : `
-                <button type="button" class="table-button complete-order-button" data-order-id="${order.orderId}">Выполнен</button>
-                <button type="button" class="table-button cancel-order-button cancel" data-order-id="${order.orderId}">Отменен</button>
-              `}
+            <button type="button" class="table-button delete-order-button cancel" data-order-id="${order.orderId}">Удалить</button>
           </div>
         </td>
       </tr>
@@ -164,14 +159,7 @@ function renderOrders() {
     row.addEventListener('click', () => toggleOrderDetails(row.dataset.orderId));
   });
 
-  elements.ordersTable.querySelectorAll('.complete-order-button').forEach((button) => {
-    button.addEventListener('click', (event) => {
-      event.stopPropagation();
-      completeOrder(button.dataset.orderId);
-    });
-  });
-
-  elements.ordersTable.querySelectorAll('.cancel-order-button').forEach((button) => {
+  elements.ordersTable.querySelectorAll('.delete-order-button').forEach((button) => {
     button.addEventListener('click', (event) => {
       event.stopPropagation();
       cancelOrder(button.dataset.orderId);
