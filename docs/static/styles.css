@@ -269,7 +269,7 @@ button:disabled {
 table {
   width: 100%;
   border-collapse: collapse;
-  min-width: 1040px;
+  min-width: 1160px;
 }
 
 th,
@@ -326,8 +326,9 @@ tbody tr:last-child td {
 
 .row-actions {
   display: flex;
+  flex-direction: column;
   gap: 8px;
-  flex-wrap: wrap;
+  align-items: stretch;
 }
 
 .table-button,
@@ -350,6 +351,10 @@ tbody tr:last-child td {
 
 .table-button.cancel {
   background: linear-gradient(135deg, var(--cancel) 0%, #c4594b 100%);
+}
+
+.table-button.success {
+  background: linear-gradient(135deg, var(--success) 0%, #2f8a55 100%);
 }
 
 .completed-label {

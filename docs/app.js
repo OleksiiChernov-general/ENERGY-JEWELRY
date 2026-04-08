@@ -96,7 +96,7 @@ function renderOrders() {
   if (!state.orders.length) {
     elements.ordersTable.innerHTML = `
       <tr>
-        <td colspan="9" class="empty-cell">Заказов пока нет</td>
+        <td colspan="10" class="empty-cell">Заказов пока нет</td>
       </tr>
     `;
     return;
@@ -111,19 +111,21 @@ function renderOrders() {
         <td>${order.product}</td>
         <td>${order.quantity}</td>
         <td>${formatMoney(order.price)}</td>
+        <td>${formatMoney(order.costTl)}</td>
         <td>${formatMoney(order.total)}</td>
         <td>${order.customerName}</td>
         <td>${order.openedAt || order.createdAt || ''}</td>
         <td><span class="status-pill ${isCompleted(order) ? 'completed' : 'open'}">${isCompleted(order) ? 'Выполнен' : 'Открыт'}</span></td>
         <td>
           <div class="row-actions">
+            ${isCompleted(order) ? '' : `<button type="button" class="table-button complete-order-button success" data-order-id="${order.orderId}">Выполнить</button>`}
             <button type="button" class="table-button delete-order-button cancel" data-order-id="${order.orderId}">Удалить</button>
           </div>
         </td>
       </tr>
       ${isExpanded ? `
         <tr class="order-details-row">
-          <td colspan="9" class="order-details-cell">
+          <td colspan="10" class="order-details-cell">
             <div class="order-details">
               <div>
                 <span class="details-label">Описание заказа</span>
@@ -142,6 +144,13 @@ function renderOrders() {
 
   elements.ordersTable.querySelectorAll('.order-row').forEach((row) => {
     row.addEventListener('click', () => toggleOrderDetails(row.dataset.orderId));
+  });
+
+  elements.ordersTable.querySelectorAll('.complete-order-button').forEach((button) => {
+    button.addEventListener('click', (event) => {
+      event.stopPropagation();
+      completeOrder(button.dataset.orderId);
+    });
   });
 
   elements.ordersTable.querySelectorAll('.delete-order-button').forEach((button) => {
